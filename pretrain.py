@@ -158,7 +158,7 @@ def visualize_results(encoder, decoder, dataloader):
 ###################################
 if __name__ == "__main__":
     # Paths
-    data_dir = "/home/coung/Project/cafe_repo/data/pretrain"
+    data_dir = "data/pretrain"
 
     # Transform
     transform = transforms.Compose([
