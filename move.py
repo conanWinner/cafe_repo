@@ -2,7 +2,7 @@ import os
 import shutil
 
 # Thư mục gốc chứa tất cả subfolder
-root_dir = "/home/coung/Project/cafe_repo/data/pretrain"
+root_dir = "/kaggle/working/cafe_repo/data/pretrain"
 
 # Các định dạng ảnh hợp lệ
 image_exts = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".webp")
