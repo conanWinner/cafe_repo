@@ -1,3 +1,4 @@
 data/*.jpg
 data/
 venv/
+ckpt/*
