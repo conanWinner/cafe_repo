@@ -159,9 +159,30 @@ class CoffeeLeafClassifier(nn.Module):
             # This means it contains all ResNet50 layers except avgpool and fc
             checkpoint = torch.load(pretrained_path, map_location='cpu')
             
-            # Load the pretrained encoder directly
-            self.features = checkpoint
-            print("✓ Pretrained encoder loaded successfully!")
+            # Check if checkpoint is a state_dict or a model
+            if isinstance(checkpoint, nn.Module):
+                # Checkpoint is already a model (nn.Sequential)
+                self.features = checkpoint
+                print("✓ Pretrained encoder loaded successfully (as nn.Module)")
+            elif isinstance(checkpoint, dict) and 'state_dict' not in checkpoint:
+                # Checkpoint is a state_dict
+                print("✓ Checkpoint is a state_dict, loading into ResNet50...")
+                resnet = models.resnet50(pretrained=False)
+                self.features = nn.Sequential(*list(resnet.children())[:-2])
+                
+                # Try to load the state dict
+                try:
+                    self.features.load_state_dict(checkpoint, strict=False)
+                    print("✓ Pretrained weights loaded successfully!")
+                except Exception as e:
+                    print(f"⚠ Warning: Could not load all weights: {e}")
+                    print("  Continuing with partial weights...")
+            else:
+                # Unknown format, create from scratch
+                print("⚠ Unknown checkpoint format, creating encoder from scratch...")
+                resnet = models.resnet50(pretrained=False)
+                self.features = nn.Sequential(*list(resnet.children())[:-2])
+            
             print(f"  Encoder architecture: ResNet50 without last 2 layers (no avgpool, no fc)")
             
             # Freeze the pretrained encoder (optional - uncomment to freeze)
