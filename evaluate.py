@@ -16,7 +16,7 @@ YOLO_WEIGHTS = "ckpt/yolom.pt"  # YOLO đã train
 RESNET_WEIGHTS = "ckpt/symp_151025.pth"       # ResNet50 đã train (n_class khớp)
 IMG_SIZE = 224
 BATCH_SIZE = 32
-NUM_WORKERS = 4
+NUM_WORKERS = 0  # Set to 0 to avoid CUDA multiprocessing issues with YOLO
 YOLO_CONF = 0.25
 YOLO_IOU = 0.45
 YOLO_CLASSES = None   # ví dụ: [0, 3] nếu chỉ muốn lấy bbox từ các lớp này; None = tất cả
@@ -109,7 +109,7 @@ def build_resnet50(n_classes: int) -> nn.Module:
         def __init__(self, num_classes=6):
             super(CoffeeLeafClassifier, self).__init__()
             # Encoder: ResNet50 without last 2 layers (no avgpool, no fc)
-            resnet = models.resnet50(pretrained=False)
+            resnet = models.resnet50(weights=None)  # Use weights=None instead of pretrained=False
             self.features = nn.Sequential(*list(resnet.children())[:-2])
             
             # Add adaptive pooling and classifier head
@@ -142,10 +142,23 @@ loader = DataLoader(tmp_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=NU
 
 # 6) Load ResNet50 đã train & evaluate
 model = build_resnet50(n_classes).to(DEVICE)
-state = torch.load(RESNET_WEIGHTS, map_location=DEVICE)
-# Cho phép strict=False nếu bạn lưu kèm optimizer/ema...
-missing, unexpected = model.load_state_dict(state if isinstance(state, dict) and "state_dict" not in state else state.get("state_dict", state), strict=False)
-print("Missing keys:", missing, "| Unexpected keys:", unexpected)
+checkpoint = torch.load(RESNET_WEIGHTS, map_location=DEVICE)
+
+# Extract model_state_dict from checkpoint
+if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+    state_dict = checkpoint['model_state_dict']
+    print(f"Loaded checkpoint from epoch {checkpoint.get('epoch', 'unknown')}")
+    print(f"  Val Acc: {checkpoint.get('val_acc', 'N/A'):.4f}" if 'val_acc' in checkpoint else "")
+elif isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
+    state_dict = checkpoint['state_dict']
+else:
+    state_dict = checkpoint
+
+missing, unexpected = model.load_state_dict(state_dict, strict=False)
+if missing:
+    print("Missing keys:", missing[:5], "..." if len(missing) > 5 else "")
+if unexpected:
+    print("Unexpected keys:", unexpected[:5], "..." if len(unexpected) > 5 else "")
 model.eval()
 
 correct, total = 0, 0
