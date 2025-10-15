@@ -185,3 +185,4 @@ if __name__ == "__main__":
 
     # Visualization
     visualize_results(encoder, decoder, dataloader)
+
