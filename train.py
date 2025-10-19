@@ -33,11 +33,11 @@ CONFIG = {
     'batch_size': 32,
     'num_epochs': 50,
     'learning_rate': 1e-4,
-    'num_classes': 6,
+    'num_classes': 7,
     'image_size': 224,
     'num_workers': 4,
     'save_every': 5,  # Save checkpoint every N epochs
-    'classes': ['Cercospora', 'Corticium', 'mealy', 'Miner', 'Phoma', 'Rust'],
+    'classes': ['Cercospora', 'Corticium', 'mealy', 'Miner', 'Phoma', 'Rust', 'ttrung'],
     # Class imbalance handling
     'use_class_weights': True,  # Use weighted loss
     'use_weighted_sampler': True,  # Use weighted random sampler

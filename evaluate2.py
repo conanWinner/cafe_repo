@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+"""
+Evaluation Script: ResNet50 on Pre-cropped Test Data
+Evaluates the trained ResNet50 model on pre-cropped test images
+"""
+
 import os
 from pathlib import Path
 from typing import List, Tuple, Optional
@@ -11,22 +17,14 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, models
 
 # 1) Cấu hình
-DATA_ROOT = "data/ft_data/test"  # thư mục test: data/test/<class_name>/*.jpg
-YOLO_WEIGHTS = "ckpt/yolom.pt"  # YOLO đã train
-RESNET_WEIGHTS = "ckpt/final_model1.pth"       # ResNet50 đã train (n_class khớp)
+DATA_ROOT = "data/test4"  # thư mục test đã crop sẵn: data/cropped_test/<class_name>/*.jpg
+RESNET_WEIGHTS = "ckpt/final_model4.pth"  # ResNet50 đã train
 IMG_SIZE = 224
 BATCH_SIZE = 32
-NUM_WORKERS = 0  # Set to 0 to avoid CUDA multiprocessing issues with YOLO
-YOLO_CONF = 0.25
-YOLO_IOU = 0.45
-YOLO_CLASSES = None   # ví dụ: [0, 3] nếu chỉ muốn lấy bbox từ các lớp này; None = tất cả
+NUM_WORKERS = 4
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# 2) Load YOLO (Ultralytics)
-from ultralytics import YOLO
-yolo = YOLO(YOLO_WEIGHTS)
-
-# 3) Biến đổi cho ResNet50
+# 2) Biến đổi cho ResNet50
 cls_transform = transforms.Compose([
     transforms.Resize((IMG_SIZE, IMG_SIZE)),
     transforms.ToTensor(),
@@ -34,83 +32,61 @@ cls_transform = transforms.Compose([
                          std=[0.229, 0.224, 0.225]),
 ])
 
-# 4) Dataset: đọc ảnh gốc, cắt bằng YOLO -> trả về crop cho ResNet
-class YoloCropEvalDS(Dataset):
-    def __init__(self, root: str, transform, yolo_model: YOLO,
-                 yolo_conf=0.25, yolo_iou=0.45, yolo_classes=None):
+# 3) Dataset: đọc ảnh đã crop sẵn
+class PreCroppedEvalDS(Dataset):
+    def __init__(self, root: str, transform):
         self.samples = []  # (img_path, label_idx)
         self.class_to_idx = {}
         self.transform = transform
-        self.yolo = yolo_model
-        self.yolo_conf = yolo_conf
-        self.yolo_iou = yolo_iou
-        self.yolo_classes = yolo_classes
 
         root = Path(root)
         # Use the same class order as train.py
         classes = ['Cercospora', 'Corticium', 'mealy', 'Miner', 'Phoma', 'Rust']
         self.class_to_idx = {c: i for i, c in enumerate(classes)}
+        
         for c in classes:
-            for p in (root / c).glob("*.*"):
+            class_dir = root / c
+            if not class_dir.exists():
+                print(f"Warning: {class_dir} does not exist!")
+                continue
+                
+            for p in class_dir.glob("*.*"):
                 if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".webp"}:
                     self.samples.append((str(p), self.class_to_idx[c]))
+        
+        if len(self.samples) == 0:
+            raise ValueError(f"No images found in {root}. Please check the directory structure.")
+        
+        print(f"Found {len(self.samples)} images")
+        
+        # Print class distribution
+        class_counts = {c: 0 for c in classes}
+        for _, label in self.samples:
+            class_counts[classes[label]] += 1
+        
+        print("Class distribution:")
+        for cls, count in class_counts.items():
+            print(f"  {cls:12s}: {count:4d} images")
 
     def __len__(self):
         return len(self.samples)
 
-    @staticmethod
-    def _safe_crop(img: Image.Image, xyxy: np.ndarray, pad_ratio: float = 0.02):
-        """Crop có padding nhẹ để tránh cắt hụt viền."""
-        w, h = img.size
-        x1, y1, x2, y2 = xyxy
-        # padding theo cạnh ngắn
-        pad = int(pad_ratio * min(w, h))
-        x1 = max(0, int(x1) - pad)
-        y1 = max(0, int(y1) - pad)
-        x2 = min(w, int(x2) + pad)
-        y2 = min(h, int(y2) + pad)
-        return img.crop((x1, y1, x2, y2))
-
-    def _detect_best_crop(self, img: Image.Image) -> Image.Image:
-        # YOLO nhận ndarray/BGR hoặc path; ở đây truyền PIL → tự chuyển
-        res = self.yolo.predict(
-            img, conf=self.yolo_conf, iou=self.yolo_iou,
-            classes=self.yolo_classes, verbose=False
-        )
-        r = res[0]
-        if r.boxes is None or len(r.boxes) == 0:
-            # Không phát hiện: fallback = resize ảnh gốc
-            return img
-
-        boxes = r.boxes
-        conf = boxes.conf.cpu().numpy()  # (N,)
-        xyxy = boxes.xyxy.cpu().numpy()  # (N, 4) theo toạ độ ảnh gốc
-
-        # Lấy bbox có confidence cao nhất
-        best_idx = int(conf.argmax())
-        crop = self._safe_crop(img, xyxy[best_idx])
-        return crop
-
     def __getitem__(self, idx):
         img_path, label = self.samples[idx]
         img = Image.open(img_path).convert("RGB")
-
-        # detect & crop
-        crop = self._detect_best_crop(img)
-
-        # transform cho ResNet
-        x = self.transform(crop)
+        
+        # Transform
+        x = self.transform(img)
         return x, label, img_path
 
-# 5) Model ResNet50 (n_classes tự suy ra từ folder)
-# Architecture must match train.py's CoffeeLeafClassifier
+# 4) Model ResNet50 - Architecture must match train.py's CoffeeLeafClassifier
 def build_resnet50(n_classes: int) -> nn.Module:
     """Build ResNet50 classifier matching train.py architecture"""
     class CoffeeLeafClassifier(nn.Module):
         def __init__(self, num_classes=6):
             super(CoffeeLeafClassifier, self).__init__()
             # Encoder: ResNet50 without last 2 layers (no avgpool, no fc)
-            resnet = models.resnet50(weights=None)  # Use weights=None instead of pretrained=False
+            resnet = models.resnet50(weights=None)
             self.features = nn.Sequential(*list(resnet.children())[:-2])
             
             # Add adaptive pooling and classifier head
@@ -134,63 +110,62 @@ def build_resnet50(n_classes: int) -> nn.Module:
     
     return CoffeeLeafClassifier(num_classes=n_classes)
 
+print(f"{'='*60}")
+print(f"ResNet50 Evaluation on Pre-Cropped Test Data")
+print(f"{'='*60}\n")
+print(f"Device: {DEVICE}")
+print(f"Data root: {DATA_ROOT}")
+print(f"Checkpoint: {RESNET_WEIGHTS}\n")
+
 # Chuẩn bị dataset/loader
-tmp_ds = YoloCropEvalDS(DATA_ROOT, cls_transform, yolo, YOLO_CONF, YOLO_IOU, YOLO_CLASSES)
+print("Loading dataset...")
+tmp_ds = PreCroppedEvalDS(DATA_ROOT, cls_transform)
 n_classes = len(tmp_ds.class_to_idx)
-print("Classes:", tmp_ds.class_to_idx)
+print(f"\nClasses: {tmp_ds.class_to_idx}\n")
 
-loader = DataLoader(tmp_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
+loader = DataLoader(tmp_ds, batch_size=BATCH_SIZE, shuffle=False, 
+                   num_workers=NUM_WORKERS, pin_memory=True)
 
-# 6) Load ResNet50 đã train & evaluate
+# 5) Load ResNet50 & evaluate
+print("Loading model...")
 model = build_resnet50(n_classes).to(DEVICE)
 
-# Check if checkpoint file exists
+# Check if checkpoint exists
 if not os.path.exists(RESNET_WEIGHTS):
-    raise FileNotFoundError(f"❌ Checkpoint file not found: {RESNET_WEIGHTS}")
+    print(f"❌ Error: Checkpoint not found at {RESNET_WEIGHTS}")
+    print("Please check the path and try again.")
+    exit(1)
 
 checkpoint = torch.load(RESNET_WEIGHTS, map_location=DEVICE)
-print(f"✓ Checkpoint file loaded: {RESNET_WEIGHTS}")
 
 # Extract model_state_dict from checkpoint
 if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
     state_dict = checkpoint['model_state_dict']
     print(f"✓ Loaded checkpoint from epoch {checkpoint.get('epoch', 'unknown')}")
     if 'val_acc' in checkpoint:
-        print(f"  Training Val Acc: {checkpoint.get('val_acc', 'N/A'):.4f}")
-    if 'val_loss' in checkpoint:
-        print(f"  Training Val Loss: {checkpoint.get('val_loss', 'N/A'):.4f}")
+        print(f"  Validation Accuracy: {checkpoint.get('val_acc', 0):.4f}")
 elif isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
     state_dict = checkpoint['state_dict']
-    print("✓ Loaded state_dict from checkpoint")
 else:
     state_dict = checkpoint
-    print("✓ Loaded checkpoint as state_dict")
 
-# Load weights into model
+# Load weights
 missing, unexpected = model.load_state_dict(state_dict, strict=False)
 if missing:
-    print(f"⚠ Missing keys ({len(missing)}): {missing[:3]}{'...' if len(missing) > 3 else ''}")
-    print("   This might indicate architecture mismatch!")
-else:
-    print("✓ All model weights loaded successfully!")
-    
-if unexpected:
-    print(f"⚠ Unexpected keys ({len(unexpected)}): {unexpected[:3]}{'...' if len(unexpected) > 3 else ''}")
+    print(f"⚠ Warning: Missing keys in checkpoint (showing first 5): {missing[:5]}")
+if unexpected and len(unexpected) > 0 and 'epoch' not in unexpected:
+    print(f"⚠ Warning: Unexpected keys in checkpoint (showing first 5): {unexpected[:5]}")
 
-# Verify model is loaded correctly by checking if weights are not random
-print("\n✓ Model architecture summary:")
-total_params = sum(p.numel() for p in model.parameters())
-trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-print(f"  Total parameters: {total_params:,}")
-print(f"  Trainable parameters: {trainable_params:,}")
-
+print("✓ Model loaded successfully\n")
 model.eval()
 
+# Evaluate
+print("Evaluating...")
 correct, total = 0, 0
 all_preds, all_labels = [], []
 
 with torch.no_grad():
-    for x, y, _ in tqdm(loader, desc="Evaluating ResNet50 on YOLO-crops"):
+    for x, y, _ in tqdm(loader, desc="Evaluating ResNet50"):
         x = x.to(DEVICE, non_blocking=True)
         y = y.to(DEVICE, non_blocking=True)
         logits = model(x)
@@ -205,7 +180,7 @@ print(f"\n{'='*60}")
 print(f"Overall Accuracy: {acc:.4f} ({correct}/{total})")
 print(f"{'='*60}\n")
 
-# (tuỳ chọn) Confusion matrix & classification report (cần scikit-learn)
+# Detailed metrics with sklearn
 try:
     import sklearn.metrics as skm
     from datetime import datetime
@@ -242,7 +217,7 @@ try:
     print(f"{'='*60}\n")
     
     # Create output directory
-    output_dir = Path("evaluation_results")
+    output_dir = Path("evaluation_results_cropped")
     output_dir.mkdir(exist_ok=True)
     
     # Generate timestamp for filenames
@@ -266,7 +241,7 @@ try:
     # Save detailed metrics per class
     metrics_file = output_dir / f"per_class_metrics_{timestamp}.txt"
     with open(metrics_file, 'w') as f:
-        f.write("Per-Class Evaluation Metrics\n")
+        f.write("Per-Class Evaluation Metrics (Pre-Cropped Test Data)\n")
         f.write("=" * 60 + "\n\n")
         f.write(f"Overall Accuracy: {acc:.4f} ({correct}/{total})\n\n")
         f.write("Average Metrics:\n")
@@ -302,6 +277,7 @@ try:
     json_file = output_dir / f"evaluation_results_{timestamp}.json"
     results = {
         'timestamp': timestamp,
+        'data_source': 'pre-cropped test data',
         'checkpoint': RESNET_WEIGHTS,
         'overall_accuracy': float(acc),
         'total_samples': int(total),
@@ -342,3 +318,7 @@ except ImportError as e:
     print("Install with: pip install scikit-learn")
 except Exception as e:
     print(f"⚠ Error generating reports: {e}")
+    import traceback
+    traceback.print_exc()
+
+print("\n✅ Evaluation completed!")

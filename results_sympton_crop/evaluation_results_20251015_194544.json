@@ -1,0 +1,113 @@
+{
+  "timestamp": "20251015_194544",
+  "checkpoint": "ckpt/final_model1.pth",
+  "overall_accuracy": 0.8146067415730337,
+  "total_samples": 178,
+  "correct_predictions": 145,
+  "classes": [
+    "Cercospora",
+    "Corticium",
+    "mealy",
+    "Miner",
+    "Phoma",
+    "Rust"
+  ],
+  "per_class_metrics": {
+    "Cercospora": {
+      "precision": 0.42857142857142855,
+      "recall": 0.6,
+      "f1_score": 0.5,
+      "support": 15
+    },
+    "Corticium": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "support": 6
+    },
+    "mealy": {
+      "precision": 0.8636363636363636,
+      "recall": 0.9047619047619048,
+      "f1_score": 0.8837209302325582,
+      "support": 21
+    },
+    "Miner": {
+      "precision": 0.9365079365079365,
+      "recall": 0.855072463768116,
+      "f1_score": 0.8939393939393939,
+      "support": 69
+    },
+    "Phoma": {
+      "precision": 0.75,
+      "recall": 1.0,
+      "f1_score": 0.8571428571428571,
+      "support": 30
+    },
+    "Rust": {
+      "precision": 0.8461538461538461,
+      "recall": 0.5945945945945946,
+      "f1_score": 0.6984126984126984,
+      "support": 37
+    }
+  },
+  "macro_avg": {
+    "precision": 0.8041449291449291,
+    "recall": 0.8257381605207693,
+    "f1_score": 0.8055359799545846
+  },
+  "weighted_avg": {
+    "precision": 0.8370318819757021,
+    "recall": 0.8146067415730337,
+    "f1_score": 0.8162669284958283
+  },
+  "confusion_matrix": [
+    [
+      9,
+      0,
+      0,
+      2,
+      3,
+      1
+    ],
+    [
+      0,
+      6,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      1,
+      0,
+      19,
+      0,
+      0,
+      1
+    ],
+    [
+      2,
+      0,
+      1,
+      59,
+      5,
+      2
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      30,
+      0
+    ],
+    [
+      9,
+      0,
+      2,
+      2,
+      2,
+      22
+    ]
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "timestamp": "20251016_124540",
+  "data_root": "data/test2",
+  "checkpoint": "ckpt/final_model2.pth",
+  "total_samples": 167,
+  "correct_predictions": 167,
+  "accuracy": 1.0,
+  "per_class_accuracy": {
+    "Cercospora": {
+      "correct": 9,
+      "total": 9,
+      "accuracy": 1.0
+    },
+    "Corticium": {
+      "correct": 6,
+      "total": 6,
+      "accuracy": 1.0
+    },
+    "mealy": {
+      "correct": 21,
+      "total": 21,
+      "accuracy": 1.0
+    },
+    "Miner": {
+      "correct": 65,
+      "total": 65,
+      "accuracy": 1.0
+    },
+    "Phoma": {
+      "correct": 30,
+      "total": 30,
+      "accuracy": 1.0
+    },
+    "Rust": {
+      "correct": 36,
+      "total": 36,
+      "accuracy": 1.0
+    }
+  },
+  "detailed_results": [
+    {
+      "true_class": "Cercospora",
+      "pred_class": "Cercospora",
+      "confidence": 
